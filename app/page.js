@@ -490,7 +490,7 @@ export default function Dashboard() {
       {/* Yield Trend */}
       <div className="panels-row">
         <div className="panel">
-          <div className="panel-title">歩留まり推移</div>
+          <div className="panel-title"><span>歩留まり推移</span></div>
           <YieldChart data={chartAgg} />
         </div>
       </div>
@@ -498,7 +498,7 @@ export default function Dashboard() {
       {/* Branch Chart + Ranking */}
       <div className="panels-2col">
         <div className="panel">
-          <div className="panel-title">支店別比較</div>
+          <div className="panel-title"><span>支店別比較</span></div>
           <BranchChart data={agg} />
         </div>
         <div className="panel">
@@ -516,7 +516,7 @@ export default function Dashboard() {
       {/* Branch Summary */}
       <div className="panels-row">
         <div className="panel">
-          <div className="panel-title">支店サマリー</div>
+          <div className="panel-title"><span>支店サマリー</span></div>
           <BranchSummary data={agg} />
         </div>
       </div>
