@@ -528,6 +528,59 @@ tr.data-row:hover {
 
 tr.data-row:hover td { color: var(--text-primary); }
 
+/* Branch summary expandable */
+.branch-summary-table .branch-row {
+  transition: background 0.15s;
+}
+.branch-summary-table .branch-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+.branch-summary-table .branch-row.expanded {
+  background: rgba(0, 212, 170, 0.04);
+}
+.branch-summary-table .branch-row.expanded td {
+  color: var(--text-primary);
+}
+
+.chevron-cell {
+  text-align: center;
+  color: var(--text-muted);
+  width: 28px;
+}
+.chevron {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 10px;
+  opacity: 0.6;
+}
+.chevron.open {
+  transform: rotate(90deg);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.person-row {
+  background: rgba(0, 0, 0, 0.2);
+}
+.person-row td {
+  font-size: 11px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.person-row .person-name {
+  color: var(--text-muted);
+  font-weight: 400;
+  padding-left: 20px;
+}
+
+.total-row {
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.total-row td {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 12px;
+}
+
 /* Rank indicators — subtle left accent */
 .rank-1 td:first-child {
   border-left: 2px solid #eab308;

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Chart from "chart.js/auto";
 
 const SPREADSHEET_ID = "1piVZdutD0KKvMwO6v6VmolBE8Z3XRrrOAg_3Tku2oc4";
@@ -14,6 +14,17 @@ const COLORS = {
   grid: "rgba(255,255,255,0.03)",
   text: "#6b7a8d",
 };
+
+/* ── Week Utility ── */
+// Returns week key like "2026/03 W1" and day-of-month bucket (1-4)
+function getWeekKey(dateStr) {
+  // dateStr is "YYYY/MM/DD"
+  const parts = dateStr.split("/");
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[2], 10);
+  const week = Math.min(Math.ceil(day / 7), 4); // 1-7→1, 8-14→2, 15-21→3, 22+→4
+  return `${parts[0]}/${parts[1]} W${week}`;
+}
 
 /* ── Data Fetch ── */
 async function fetchSheetData() {
@@ -36,9 +47,11 @@ async function fetchSheetData() {
       }
       if (!dateStr) return null;
       const month = dateStr.substring(0, 7).replace("/", "-");
+      const week = getWeekKey(dateStr);
       return {
         date: dateStr,
         month,
+        week,
         person: (c[1].v || "").toString().trim(),
         branch: (c[2].v || "").toString().trim(),
         calls: Number(c[3]?.v || 0),
@@ -53,10 +66,10 @@ async function fetchSheetData() {
 function aggregate(rows) {
   const tot = { calls: 0, connects: 0, apos: 0 };
   const byMonth = {};
+  const byWeek = {};
   const byBranch = {};
   const byPerson = {};
   const byMonthBranch = {};
-  const byMonthPerson = {};
 
   rows.forEach((r) => {
     tot.calls += r.calls;
@@ -67,6 +80,13 @@ function aggregate(rows) {
     byMonth[r.month].calls += r.calls;
     byMonth[r.month].connects += r.connects;
     byMonth[r.month].apos += r.apos;
+
+    if (r.week) {
+      if (!byWeek[r.week]) byWeek[r.week] = { calls: 0, connects: 0, apos: 0 };
+      byWeek[r.week].calls += r.calls;
+      byWeek[r.week].connects += r.connects;
+      byWeek[r.week].apos += r.apos;
+    }
 
     if (!byBranch[r.branch]) byBranch[r.branch] = { calls: 0, connects: 0, apos: 0 };
     byBranch[r.branch].calls += r.calls;
@@ -86,7 +106,7 @@ function aggregate(rows) {
     byMonthBranch[mbk].apos += r.apos;
   });
 
-  return { tot, byMonth, byBranch, byPerson, byMonthBranch };
+  return { tot, byMonth, byWeek, byBranch, byPerson, byMonthBranch };
 }
 
 function rate(num, den) {
@@ -178,7 +198,7 @@ function KpiCard({ label, value, unit, colorClass, trend, trendUnit }) {
   );
 }
 
-/* ── Yield Chart ── */
+/* ── Yield Chart (Weekly) ── */
 function YieldChart({ data }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -187,15 +207,24 @@ function YieldChart({ data }) {
     if (!canvasRef.current || !data) return;
     if (chartRef.current) chartRef.current.destroy();
 
-    const months = Object.keys(data.byMonth).sort();
-    const apoRate = months.map((m) => Number(rate(data.byMonth[m].apos, data.byMonth[m].calls)));
-    const cToARate = months.map((m) => Number(rate(data.byMonth[m].apos, data.byMonth[m].connects)));
-    const connRate = months.map((m) => Number(rate(data.byMonth[m].connects, data.byMonth[m].calls)));
+    const weeks = Object.keys(data.byWeek || {}).sort();
+    if (weeks.length === 0) return;
+
+    const apoRate = weeks.map((w) => Number(rate(data.byWeek[w].apos, data.byWeek[w].calls)));
+    const cToARate = weeks.map((w) => Number(rate(data.byWeek[w].apos, data.byWeek[w].connects)));
+    const connRate = weeks.map((w) => Number(rate(data.byWeek[w].connects, data.byWeek[w].calls)));
+
+    // Convert "2026/03 W1" → "3月 第1週"
+    const labels = weeks.map((w) => {
+      const m = w.match(/(\d{4})\/(\d{2}) W(\d)/);
+      if (!m) return w;
+      return `${parseInt(m[2], 10)}月 第${m[3]}週`;
+    });
 
     chartRef.current = new Chart(canvasRef.current, {
       type: "line",
       data: {
-        labels: months.map((m) => m.replace("-", "/")),
+        labels,
         datasets: [
           { label: "アポ率", data: apoRate, borderColor: COLORS.accent, backgroundColor: "rgba(0,212,170,0.06)", fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2, pointBackgroundColor: COLORS.accent },
           { label: "着電toアポ率", data: cToARate, borderColor: COLORS.blue, backgroundColor: "rgba(79,143,247,0.06)", fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2, pointBackgroundColor: COLORS.blue },
@@ -320,14 +349,19 @@ function RankingTable({ data, mode }) {
   );
 }
 
-/* ── Branch Summary Table ── */
+/* ── Branch Summary Table (Expandable) ── */
 function BranchSummary({ data }) {
+  const [expanded, setExpanded] = useState(null);
   if (!data) return null;
   const branches = BRANCHES.filter((b) => data.byBranch[b]);
+
+  const toggle = (b) => setExpanded(expanded === b ? null : b);
+
   return (
-    <table>
+    <table className="branch-summary-table">
       <thead>
         <tr>
+          <th style={{ width: 28 }}></th>
           <th>支店</th><th>架電数</th><th>着電数</th><th>アポ数</th>
           <th>アポ率</th><th>着電toアポ率</th><th>着電率</th>
         </tr>
@@ -335,19 +369,45 @@ function BranchSummary({ data }) {
       <tbody>
         {branches.map((b, i) => {
           const d = data.byBranch[b];
+          const isOpen = expanded === b;
+          const persons = Object.values(data.byPerson)
+            .filter((p) => p.branch === b)
+            .sort((a, b2) => b2.calls - a.calls);
           return (
-            <tr key={b} className="data-row" style={{ animationDelay: `${i * 0.05}s` }}>
-              <td style={{ fontWeight: 500 }}>{b}</td>
-              <td className="mono">{d.calls.toLocaleString()}</td>
-              <td className="mono">{d.connects.toLocaleString()}</td>
-              <td className="mono">{d.apos.toLocaleString()}</td>
-              <td className="mono" style={{ color: COLORS.accent }}>{rate(d.apos, d.calls)}%</td>
-              <td className="mono" style={{ color: COLORS.blue }}>{rate(d.apos, d.connects)}%</td>
-              <td className="mono" style={{ color: COLORS.amber }}>{rate(d.connects, d.calls)}%</td>
-            </tr>
+            <React.Fragment key={b}>
+              <tr
+                className={`data-row branch-row ${isOpen ? "expanded" : ""}`}
+                style={{ animationDelay: `${i * 0.05}s`, cursor: "pointer" }}
+                onClick={() => toggle(b)}
+              >
+                <td className="chevron-cell">
+                  <span className={`chevron ${isOpen ? "open" : ""}`}>▸</span>
+                </td>
+                <td style={{ fontWeight: 500 }}>{b}</td>
+                <td className="mono">{d.calls.toLocaleString()}</td>
+                <td className="mono">{d.connects.toLocaleString()}</td>
+                <td className="mono">{d.apos.toLocaleString()}</td>
+                <td className="mono" style={{ color: COLORS.accent }}>{rate(d.apos, d.calls)}%</td>
+                <td className="mono" style={{ color: COLORS.blue }}>{rate(d.apos, d.connects)}%</td>
+                <td className="mono" style={{ color: COLORS.amber }}>{rate(d.connects, d.calls)}%</td>
+              </tr>
+              {isOpen && persons.map((p, j) => (
+                <tr key={`${b}-${p.person}`} className="data-row person-row" style={{ animationDelay: `${j * 0.03}s` }}>
+                  <td></td>
+                  <td className="person-name">└ {p.person}</td>
+                  <td className="mono">{p.calls.toLocaleString()}</td>
+                  <td className="mono">{p.connects.toLocaleString()}</td>
+                  <td className="mono">{p.apos.toLocaleString()}</td>
+                  <td className="mono" style={{ color: COLORS.accent }}>{rate(p.apos, p.calls)}%</td>
+                  <td className="mono" style={{ color: COLORS.blue }}>{rate(p.apos, p.connects)}%</td>
+                  <td className="mono" style={{ color: COLORS.amber }}>{rate(p.connects, p.calls)}%</td>
+                </tr>
+              ))}
+            </React.Fragment>
           );
         })}
-        <tr className="data-row" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", animationDelay: `${branches.length * 0.05}s` }}>
+        <tr className="data-row total-row" style={{ animationDelay: `${branches.length * 0.05}s` }}>
+          <td></td>
           <td style={{ fontWeight: 600 }}>合計</td>
           <td className="mono" style={{ fontWeight: 600 }}>{data.tot.calls.toLocaleString()}</td>
           <td className="mono" style={{ fontWeight: 600 }}>{data.tot.connects.toLocaleString()}</td>
@@ -430,9 +490,9 @@ export default function Dashboard() {
   const prevCToARate = prevMonthData ? Number(rate(prevMonthData.tot.apos, prevMonthData.tot.connects)) : null;
   const prevConnRate = prevMonthData ? Number(rate(prevMonthData.tot.connects, prevMonthData.tot.calls)) : null;
 
-  // Full data for charts (all months, filtered by branch/person)
+  // Weekly chart data — respect month filter (so 1 month shows 4 weeks)
   const chartFiltered = rawData
-    ? rawData.filter((r) => selBranches.includes(r.branch) && selPersons.includes(r.person))
+    ? rawData.filter((r) => selMonths.includes(r.month) && selBranches.includes(r.branch) && selPersons.includes(r.person))
     : [];
   const chartAgg = aggregate(chartFiltered);
 
