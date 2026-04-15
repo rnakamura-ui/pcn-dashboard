@@ -256,7 +256,7 @@ function KpiModal({ metric, data, onClose }) {
 }
 
 /* ── Yield Chart (Weekly, Clickable) ── */
-function YieldChart({ data, onPointClick }) {
+function YieldChart({ data, onPointClick, selMonths }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -264,12 +264,23 @@ function YieldChart({ data, onPointClick }) {
     if (!canvasRef.current || !data) return;
     if (chartRef.current) chartRef.current.destroy();
 
-    const weeks = Object.keys(data.byWeek || {}).sort();
+    // Always generate 4 weeks per selected month, even if no data
+    // selMonths format: "2026-04", week key format: "2026/04 W1"
+    const monthsToShow = (selMonths && selMonths.length > 0
+      ? selMonths.map((m) => m.replace("-", "/"))
+      : [...new Set(Object.keys(data.byWeek || {}).map((w) => w.split(" ")[0]))]
+    ).sort();
+
+    const weeks = [];
+    monthsToShow.forEach((m) => {
+      for (let i = 1; i <= 4; i++) weeks.push(`${m} W${i}`);
+    });
     if (weeks.length === 0) return;
 
-    const apoRate = weeks.map((w) => Number(rate(data.byWeek[w].apos, data.byWeek[w].calls)));
-    const cToARate = weeks.map((w) => Number(rate(data.byWeek[w].apos, data.byWeek[w].connects)));
-    const connRate = weeks.map((w) => Number(rate(data.byWeek[w].connects, data.byWeek[w].calls)));
+    const byWeek = data.byWeek || {};
+    const apoRate = weeks.map((w) => byWeek[w] ? Number(rate(byWeek[w].apos, byWeek[w].calls)) : null);
+    const cToARate = weeks.map((w) => byWeek[w] ? Number(rate(byWeek[w].apos, byWeek[w].connects)) : null);
+    const connRate = weeks.map((w) => byWeek[w] ? Number(rate(byWeek[w].connects, byWeek[w].calls)) : null);
 
     // Convert "2026/03 W1" → "3月 第1週"
     const labels = weeks.map((w) => {
@@ -293,6 +304,7 @@ function YieldChart({ data, onPointClick }) {
         maintainAspectRatio: false,
         animation: { duration: 1200, easing: "easeOutQuart" },
         interaction: { mode: "index", intersect: false },
+        spanGaps: true,
         onClick: (evt, elements) => {
           if (!onPointClick || elements.length === 0) return;
           const idx = elements[0].index;
@@ -871,7 +883,7 @@ export default function Dashboard() {
             <span>歩留まり推移（週次）</span>
             {weekDetail && <button className="close-detail" onClick={() => setWeekDetail(null)}>週詳細を閉じる ×</button>}
           </div>
-          <YieldChart data={chartAgg} onPointClick={(w) => setWeekDetail(w)} />
+          <YieldChart data={chartAgg} onPointClick={(w) => setWeekDetail(w)} selMonths={selMonths} />
           {weekDetail && (
             <WeekDetailPanel week={weekDetail} rawData={rawData}
               selBranches={selBranches} selPersons={selPersons} />
