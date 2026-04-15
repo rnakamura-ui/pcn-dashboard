@@ -264,18 +264,34 @@ function YieldChart({ data, onPointClick, selMonths }) {
     if (!canvasRef.current || !data) return;
     if (chartRef.current) chartRef.current.destroy();
 
-    // Always generate 4 weeks per selected month, even if no data
-    // selMonths format: "2026-04", week key format: "2026/04 W1"
-    const monthsToShow = (selMonths && selMonths.length > 0
-      ? selMonths.map((m) => m.replace("-", "/"))
-      : [...new Set(Object.keys(data.byWeek || {}).map((w) => w.split(" ")[0]))]
-    ).sort();
+    // Rolling 4 weeks ending at the latest week that has data (can span months)
+    // Week key format: "2026/04 W1"
+    const allWeeksWithData = Object.keys(data.byWeek || {}).sort();
+    if (allWeeksWithData.length === 0) return;
 
+    // Find the latest week in the selected month(s) with data; else use overall latest
+    const selectedMonthWeeks = selMonths && selMonths.length > 0
+      ? allWeeksWithData.filter((w) => {
+          const mm = w.split(" ")[0]; // "2026/04"
+          return selMonths.map((x) => x.replace("-", "/")).includes(mm);
+        })
+      : allWeeksWithData;
+    const latestWeek = (selectedMonthWeeks.length > 0 ? selectedMonthWeeks : allWeeksWithData).slice(-1)[0];
+
+    // Generate 4 consecutive week keys ending at latestWeek (going backward across months)
+    const [latestMonth, latestWn] = latestWeek.split(" ");
+    const [ly, lm] = latestMonth.split("/").map(Number);
+    let cy = ly, cm = lm, cw = parseInt(latestWn.replace("W", ""), 10);
     const weeks = [];
-    monthsToShow.forEach((m) => {
-      for (let i = 1; i <= 4; i++) weeks.push(`${m} W${i}`);
-    });
-    if (weeks.length === 0) return;
+    for (let i = 0; i < 4; i++) {
+      weeks.unshift(`${cy}/${String(cm).padStart(2, "0")} W${cw}`);
+      cw--;
+      if (cw < 1) {
+        cw = 4;
+        cm--;
+        if (cm < 1) { cm = 12; cy--; }
+      }
+    }
 
     const byWeek = data.byWeek || {};
     const apoRate = weeks.map((w) => byWeek[w] ? Number(rate(byWeek[w].apos, byWeek[w].calls)) : null);
@@ -772,9 +788,9 @@ export default function Dashboard() {
   const prevCToARate = prevMonthData ? Number(rate(prevMonthData.tot.apos, prevMonthData.tot.connects)) : null;
   const prevConnRate = prevMonthData ? Number(rate(prevMonthData.tot.connects, prevMonthData.tot.calls)) : null;
 
-  // Weekly chart data — respect month filter (so 1 month shows 4 weeks)
+  // Weekly chart data — include all months so we can roll back 4 weeks across month boundaries
   const chartFiltered = rawData
-    ? rawData.filter((r) => selMonths.includes(r.month) && selBranches.includes(r.branch) && selPersons.includes(r.person))
+    ? rawData.filter((r) => selBranches.includes(r.branch) && selPersons.includes(r.person))
     : [];
   const chartAgg = aggregate(chartFiltered);
 
