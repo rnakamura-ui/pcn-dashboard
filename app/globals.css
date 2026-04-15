@@ -86,6 +86,22 @@ body::before {
   background-clip: text;
 }
 
+.version-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  -webkit-text-fill-color: var(--accent);
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
 .header-subtitle {
   font-size: 10px;
   color: var(--text-muted);

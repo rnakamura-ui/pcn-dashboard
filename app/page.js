@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Chart from "chart.js/auto";
 
 const SPREADSHEET_ID = "1piVZdutD0KKvMwO6v6VmolBE8Z3XRrrOAg_3Tku2oc4";
+const APP_VERSION = "v2.0"; // visible deploy marker
 const BRANCHES = ["札幌", "仙台", "東京", "東海", "大阪", "福岡"];
 const EXCLUDE_PERSONS = ["テスト担当者"];
 const EXCLUDE_BRANCHES = ["（未解析）"];
@@ -797,7 +798,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="header">
         <div className="header-left">
-          <div className="header-title">PCN 営業KPI ダッシュボード</div>
+          <div className="header-title">PCN 営業KPI ダッシュボード <span className="version-badge">{APP_VERSION}</span></div>
           <div className="header-subtitle">
             <span className="live-dot" />
             Pacific Net / Sales Performance ·&nbsp;
