@@ -112,7 +112,47 @@ body::before {
   50% { box-shadow: 0 0 0 6px transparent; opacity: 0.6; }
 }
 
-.filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+
+.refresh-btn {
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-card);
+  color: var(--accent);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition);
+  height: 32px;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent-dim), 0 0 12px var(--accent-dim);
+}
+
+.refresh-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.refresh-btn svg {
+  transition: transform 0.3s;
+}
+
+.refresh-btn:hover:not(:disabled) svg {
+  transform: rotate(45deg);
+}
+
+.refresh-btn.spinning svg {
+  animation: spin 0.7s linear infinite;
+}
 
 /* ── Filter Dropdown ── */
 .filter-wrap { position: relative; }

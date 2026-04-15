@@ -365,6 +365,8 @@ function BranchSummary({ data }) {
 export default function Dashboard() {
   const [rawData, setRawData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
   const [selMonths, setSelMonths] = useState([]);
   const [selBranches, setSelBranches] = useState([...BRANCHES]);
@@ -373,9 +375,10 @@ export default function Dashboard() {
   const [allMonths, setAllMonths] = useState([]);
   const [allPersons, setAllPersons] = useState([]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       const rows = await fetchSheetData();
       setRawData(rows);
       const months = [...new Set(rows.map((r) => r.month))].sort();
@@ -384,16 +387,18 @@ export default function Dashboard() {
       const persons = [...new Set(rows.map((r) => r.person))].sort();
       setAllPersons(persons);
       if (selPersons.length === 0) setSelPersons(persons);
+      setLastUpdated(new Date());
       setError(null);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { const iv = setInterval(loadData, 300000); return () => clearInterval(iv); }, [loadData]);
+  useEffect(() => { loadData(false); }, [loadData]);
+  useEffect(() => { const iv = setInterval(() => loadData(true), 300000); return () => clearInterval(iv); }, [loadData]);
 
   // Derived persons based on selected branches
   const filteredPersonOptions = rawData
@@ -454,8 +459,9 @@ export default function Dashboard() {
     );
   }
 
-  const lastUpdate = new Date();
-  const updateStr = `${lastUpdate.getHours().toString().padStart(2, "0")}:${lastUpdate.getMinutes().toString().padStart(2, "0")}`;
+  const updateStr = lastUpdated
+    ? `${lastUpdated.getHours().toString().padStart(2, "0")}:${lastUpdated.getMinutes().toString().padStart(2, "0")}:${lastUpdated.getSeconds().toString().padStart(2, "0")}`
+    : "--:--:--";
 
   return (
     <div className="dashboard">
@@ -472,6 +478,20 @@ export default function Dashboard() {
           <FilterDropdown label="月" options={allMonths} selected={selMonths} onChange={setSelMonths} />
           <FilterDropdown label="支店" options={BRANCHES} selected={selBranches} onChange={setSelBranches} />
           <FilterDropdown label="担当者" options={filteredPersonOptions} selected={selPersons} onChange={(v) => setSelPersons(v)} />
+          <button
+            className={`refresh-btn ${refreshing ? "spinning" : ""}`}
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            title="データを今すぐ更新"
+            aria-label="更新"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            <span>更新</span>
+          </button>
         </div>
       </div>
 
