@@ -174,16 +174,19 @@ function FilterDropdown({ label, options, selected, onChange }) {
   );
 }
 
-/* ── KPI Card ── */
-function KpiCard({ label, value, unit, colorClass, trend, trendUnit }) {
+/* ── KPI Card (Clickable) ── */
+function KpiCard({ label, value, unit, colorClass, trend, trendUnit, onClick }) {
   const display = useCountUp(value, 500, unit === "%" ? 1 : 0);
   const trendSuffix = trendUnit || (unit === "%" ? "pt" : "");
   const trendDisplay = trend !== undefined
     ? (unit === "%" ? trend.toFixed(1) : Math.round(trend).toLocaleString())
     : null;
   return (
-    <div className="kpi-card">
-      <div className="kpi-label">{label}</div>
+    <div className={`kpi-card ${onClick ? "clickable" : ""}`} onClick={onClick}>
+      <div className="kpi-label">
+        {label}
+        {onClick && <span className="kpi-hint">詳細 ▸</span>}
+      </div>
       <div className={`kpi-value ${colorClass}`}>
         {display}
         {unit && <span style={{ fontSize: 16, fontWeight: 400, marginLeft: 2 }}>{unit}</span>}
@@ -198,8 +201,61 @@ function KpiCard({ label, value, unit, colorClass, trend, trendUnit }) {
   );
 }
 
-/* ── Yield Chart (Weekly) ── */
-function YieldChart({ data }) {
+/* ── KPI Modal ── */
+function KpiModal({ metric, data, onClose }) {
+  if (!metric || !data) return null;
+  const branches = BRANCHES.filter((b) => data.byBranch[b]);
+  const calcValue = (d) => {
+    if (metric.key === "calls") return d.calls;
+    if (metric.key === "apoRate") return Number(rate(d.apos, d.calls));
+    if (metric.key === "cToARate") return Number(rate(d.apos, d.connects));
+    if (metric.key === "connRate") return Number(rate(d.connects, d.calls));
+    return 0;
+  };
+  const sortedBranches = [...branches].sort((a, b) => calcValue(data.byBranch[b]) - calcValue(data.byBranch[a]));
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">{metric.label} · 支店別ブレイクダウン</div>
+            <div className="modal-subtitle">全体値: {metric.unit === "%" ? metric.value.toFixed(1) + "%" : metric.value.toLocaleString()}</div>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="閉じる">×</button>
+        </div>
+        <table className="mini-table">
+          <thead>
+            <tr>
+              <th>順位</th><th>支店</th><th>架電数</th><th>着電数</th><th>アポ数</th><th>{metric.label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedBranches.map((b, i) => {
+              const d = data.byBranch[b];
+              const v = calcValue(d);
+              return (
+                <tr key={b}>
+                  <td className="mono">{i + 1}</td>
+                  <td style={{ fontWeight: 500 }}>{b}</td>
+                  <td className="mono">{d.calls.toLocaleString()}</td>
+                  <td className="mono">{d.connects.toLocaleString()}</td>
+                  <td className="mono">{d.apos.toLocaleString()}</td>
+                  <td className="mono" style={{ color: metric.color, fontWeight: 600 }}>
+                    {metric.unit === "%" ? v.toFixed(1) + "%" : v.toLocaleString()}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Yield Chart (Weekly, Clickable) ── */
+function YieldChart({ data, onPointClick }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -236,6 +292,16 @@ function YieldChart({ data }) {
         maintainAspectRatio: false,
         animation: { duration: 1200, easing: "easeOutQuart" },
         interaction: { mode: "index", intersect: false },
+        onClick: (evt, elements) => {
+          if (!onPointClick || elements.length === 0) return;
+          const idx = elements[0].index;
+          onPointClick(weeks[idx]);
+        },
+        onHover: (evt, elements) => {
+          if (evt.native && evt.native.target) {
+            evt.native.target.style.cursor = elements.length > 0 ? "pointer" : "default";
+          }
+        },
         plugins: {
           legend: { position: "top", align: "end", labels: { color: COLORS.text, font: { size: 11 }, boxWidth: 12, padding: 16 } },
           tooltip: {
@@ -251,13 +317,13 @@ function YieldChart({ data }) {
       },
     });
     return () => chartRef.current?.destroy();
-  }, [data]);
+  }, [data, onPointClick]);
 
   return <div className="chart-container-tall"><canvas ref={canvasRef} /></div>;
 }
 
-/* ── Branch Chart ── */
-function BranchChart({ data }) {
+/* ── Branch Chart (Clickable for drill-down) ── */
+function BranchChart({ data, onBarClick }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -284,6 +350,16 @@ function BranchChart({ data }) {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 800, easing: "easeOutQuart" },
+        onClick: (evt, elements) => {
+          if (!onBarClick || elements.length === 0) return;
+          const idx = elements[0].index;
+          onBarClick(branches[idx]);
+        },
+        onHover: (evt, elements) => {
+          if (evt.native && evt.native.target) {
+            evt.native.target.style.cursor = elements.length > 0 ? "pointer" : "default";
+          }
+        },
         plugins: {
           legend: { position: "top", align: "end", labels: { color: COLORS.text, font: { size: 11 }, boxWidth: 12, padding: 16 } },
           tooltip: {
@@ -299,13 +375,121 @@ function BranchChart({ data }) {
       },
     });
     return () => chartRef.current?.destroy();
-  }, [data]);
+  }, [data, onBarClick]);
 
   return <div className="chart-container"><canvas ref={canvasRef} /></div>;
 }
 
-/* ── Ranking Table ── */
-function RankingTable({ data, mode }) {
+/* ── Week Detail Panel (shown when yield chart point clicked) ── */
+function WeekDetailPanel({ week, rawData, selBranches, selPersons }) {
+  if (!rawData || !week) return null;
+  const weekRows = rawData.filter((r) => r.week === week && selBranches.includes(r.branch) && selPersons.includes(r.person));
+  // Aggregate by person
+  const byPerson = {};
+  weekRows.forEach((r) => {
+    const k = `${r.person}|${r.branch}`;
+    if (!byPerson[k]) byPerson[k] = { person: r.person, branch: r.branch, calls: 0, connects: 0, apos: 0 };
+    byPerson[k].calls += r.calls;
+    byPerson[k].connects += r.connects;
+    byPerson[k].apos += r.apos;
+  });
+  const people = Object.values(byPerson).sort((a, b) => b.calls - a.calls);
+  const tot = weekRows.reduce((a, r) => ({ calls: a.calls + r.calls, connects: a.connects + r.connects, apos: a.apos + r.apos }), { calls: 0, connects: 0, apos: 0 });
+  const m = week.match(/(\d{4})\/(\d{2}) W(\d)/);
+  const label = m ? `${parseInt(m[2], 10)}月 第${m[3]}週` : week;
+
+  return (
+    <div className="week-detail">
+      <div className="week-detail-header">
+        <span className="week-detail-label">{label} · 担当者別内訳</span>
+        <span className="week-detail-total">計: {tot.calls}架電 / {tot.connects}着電 / {tot.apos}アポ</span>
+      </div>
+      <table className="mini-table">
+        <thead>
+          <tr>
+            <th>担当者</th><th>支店</th><th>架電</th><th>着電</th><th>アポ</th>
+            <th>アポ率</th><th>着電toアポ</th><th>着電率</th>
+          </tr>
+        </thead>
+        <tbody>
+          {people.map((p) => (
+            <tr key={p.person + p.branch}>
+              <td>{p.person}</td>
+              <td>{p.branch}</td>
+              <td className="mono">{p.calls}</td>
+              <td className="mono">{p.connects}</td>
+              <td className="mono">{p.apos}</td>
+              <td className="mono" style={{ color: COLORS.accent }}>{rate(p.apos, p.calls)}%</td>
+              <td className="mono" style={{ color: COLORS.blue }}>{rate(p.apos, p.connects)}%</td>
+              <td className="mono" style={{ color: COLORS.amber }}>{rate(p.connects, p.calls)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── Branch Drill-Down (when bar in BranchChart clicked) ── */
+function BranchDrillDown({ branch, rawData, selMonths }) {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !rawData) return;
+    if (chartRef.current) chartRef.current.destroy();
+
+    const rows = rawData.filter((r) => r.branch === branch && selMonths.includes(r.month));
+    const byPerson = {};
+    rows.forEach((r) => {
+      if (!byPerson[r.person]) byPerson[r.person] = { calls: 0, connects: 0, apos: 0 };
+      byPerson[r.person].calls += r.calls;
+      byPerson[r.person].connects += r.connects;
+      byPerson[r.person].apos += r.apos;
+    });
+    const persons = Object.keys(byPerson).sort((a, b) => byPerson[b].calls - byPerson[a].calls);
+    if (persons.length === 0) return;
+    const apoR = persons.map((p) => Number(rate(byPerson[p].apos, byPerson[p].calls)));
+    const cToA = persons.map((p) => Number(rate(byPerson[p].apos, byPerson[p].connects)));
+    const connR = persons.map((p) => Number(rate(byPerson[p].connects, byPerson[p].calls)));
+
+    chartRef.current = new Chart(canvasRef.current, {
+      type: "bar",
+      data: {
+        labels: persons,
+        datasets: [
+          { label: "アポ率", data: apoR, backgroundColor: "rgba(0,212,170,0.7)", borderRadius: 4, barPercentage: 0.7 },
+          { label: "着電toアポ率", data: cToA, backgroundColor: "rgba(79,143,247,0.7)", borderRadius: 4, barPercentage: 0.7 },
+          { label: "着電率", data: connR, backgroundColor: "rgba(240,160,48,0.7)", borderRadius: 4, barPercentage: 0.7 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
+        plugins: {
+          legend: { position: "top", align: "end", labels: { color: COLORS.text, font: { size: 11 }, boxWidth: 12, padding: 16 } },
+          tooltip: {
+            backgroundColor: "#1a2736", titleColor: "#e8ecf1", bodyColor: "#8b97a8",
+            borderColor: "rgba(255,255,255,0.1)", borderWidth: 1,
+            callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: COLORS.text, font: { size: 11 } } },
+          y: { grid: { color: COLORS.grid }, ticks: { color: COLORS.text, font: { size: 11 }, callback: (v) => v + "%" }, beginAtZero: true },
+        },
+      },
+    });
+    return () => chartRef.current?.destroy();
+  }, [branch, rawData, selMonths]);
+
+  return <div className="chart-container"><canvas ref={canvasRef} /></div>;
+}
+
+/* ── Ranking Table (Expandable) ── */
+function RankingTable({ data, mode, rawData }) {
+  const [expanded, setExpanded] = useState(null);
   if (!data) return null;
   const persons = Object.values(data.byPerson);
   let sorted;
@@ -315,11 +499,13 @@ function RankingTable({ data, mode }) {
     sorted = persons.filter((p) => p.connects > 0).sort((a, b) => b.apos / b.connects - a.apos / a.connects);
   }
   const top = sorted.slice(0, 15);
+  const toggle = (k) => setExpanded(expanded === k ? null : k);
 
   return (
-    <table>
+    <table className="ranking-table">
       <thead>
         <tr>
+          <th style={{ width: 28 }}></th>
           <th>#</th>
           <th>担当者</th>
           <th>支店</th>
@@ -333,15 +519,71 @@ function RankingTable({ data, mode }) {
           const r = mode === "apo" ? rate(p.apos, p.calls) : rate(p.apos, p.connects);
           const den = mode === "apo" ? p.calls : p.connects;
           const rankClass = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "";
+          const key = p.person + "|" + p.branch;
+          const isOpen = expanded === key;
+
+          // Monthly breakdown for this person
+          const personRows = isOpen && rawData
+            ? rawData.filter((r) => r.person === p.person && r.branch === p.branch)
+            : [];
+          const monthlyBreakdown = {};
+          personRows.forEach((row) => {
+            if (!monthlyBreakdown[row.month]) monthlyBreakdown[row.month] = { calls: 0, connects: 0, apos: 0 };
+            monthlyBreakdown[row.month].calls += row.calls;
+            monthlyBreakdown[row.month].connects += row.connects;
+            monthlyBreakdown[row.month].apos += row.apos;
+          });
+          const months = Object.keys(monthlyBreakdown).sort();
+
           return (
-            <tr key={p.person + p.branch} className={`data-row ${rankClass}`} style={{ animationDelay: `${i * 0.04}s` }}>
-              <td className="mono">{i + 1}</td>
-              <td>{p.person}</td>
-              <td>{p.branch}</td>
-              <td className="mono">{den.toLocaleString()}</td>
-              <td className="mono">{p.apos.toLocaleString()}</td>
-              <td className="mono" style={{ color: Number(r) > 3 ? COLORS.accent : "inherit", fontWeight: Number(r) > 3 ? 600 : 400 }}>{r}%</td>
-            </tr>
+            <React.Fragment key={key}>
+              <tr
+                className={`data-row ${rankClass} ranking-row ${isOpen ? "expanded" : ""}`}
+                style={{ animationDelay: `${i * 0.04}s`, cursor: "pointer" }}
+                onClick={() => toggle(key)}
+              >
+                <td className="chevron-cell"><span className={`chevron ${isOpen ? "open" : ""}`}>▸</span></td>
+                <td className="mono">{i + 1}</td>
+                <td>{p.person}</td>
+                <td>{p.branch}</td>
+                <td className="mono">{den.toLocaleString()}</td>
+                <td className="mono">{p.apos.toLocaleString()}</td>
+                <td className="mono" style={{ color: Number(r) > 3 ? COLORS.accent : "inherit", fontWeight: Number(r) > 3 ? 600 : 400 }}>{r}%</td>
+              </tr>
+              {isOpen && (
+                <tr className="detail-row">
+                  <td colSpan={7} className="detail-cell">
+                    <div className="person-detail">
+                      <div className="person-detail-title">{p.person} · 月別成績推移</div>
+                      <table className="mini-table">
+                        <thead>
+                          <tr>
+                            <th>月</th><th>架電</th><th>着電</th><th>アポ</th>
+                            <th>アポ率</th><th>着電toアポ</th><th>着電率</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {months.map((m) => {
+                            const md = monthlyBreakdown[m];
+                            return (
+                              <tr key={m}>
+                                <td className="mono">{m.replace("-", "/")}</td>
+                                <td className="mono">{md.calls}</td>
+                                <td className="mono">{md.connects}</td>
+                                <td className="mono">{md.apos}</td>
+                                <td className="mono" style={{ color: COLORS.accent }}>{rate(md.apos, md.calls)}%</td>
+                                <td className="mono" style={{ color: COLORS.blue }}>{rate(md.apos, md.connects)}%</td>
+                                <td className="mono" style={{ color: COLORS.amber }}>{rate(md.connects, md.calls)}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           );
         })}
       </tbody>
@@ -434,6 +676,21 @@ export default function Dashboard() {
   const [rankMode, setRankMode] = useState("apo");
   const [allMonths, setAllMonths] = useState([]);
   const [allPersons, setAllPersons] = useState([]);
+  const [kpiModal, setKpiModal] = useState(null);
+  const [drillBranch, setDrillBranch] = useState(null);
+  const [weekDetail, setWeekDetail] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  const appendHistory = useCallback((entry) => {
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 30);
+      if (typeof window !== "undefined") {
+        try { localStorage.setItem("pcn_history", JSON.stringify(next)); } catch {}
+      }
+      return next;
+    });
+  }, []);
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -447,14 +704,26 @@ export default function Dashboard() {
       const persons = [...new Set(rows.map((r) => r.person))].sort();
       setAllPersons(persons);
       if (selPersons.length === 0) setSelPersons(persons);
-      setLastUpdated(new Date());
+      const now = new Date();
+      setLastUpdated(now);
+      appendHistory({ ts: now.toISOString(), rows: rows.length, ok: true, trigger: isRefresh ? "manual" : "auto" });
       setError(null);
     } catch (e) {
       setError(e.message);
+      appendHistory({ ts: new Date().toISOString(), rows: 0, ok: false, err: e.message, trigger: isRefresh ? "manual" : "auto" });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [appendHistory]);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("pcn_history");
+      if (saved) setHistory(JSON.parse(saved));
+    } catch {}
   }, []);
 
   useEffect(() => { loadData(false); }, [loadData]);
@@ -531,8 +800,30 @@ export default function Dashboard() {
           <div className="header-title">PCN 営業KPI ダッシュボード</div>
           <div className="header-subtitle">
             <span className="live-dot" />
-            Pacific Net / Sales Performance · 最終更新 {updateStr}
+            Pacific Net / Sales Performance ·&nbsp;
+            <span className="history-trigger" onClick={() => setHistoryOpen(!historyOpen)}>
+              最終更新 {updateStr}
+              <span style={{ marginLeft: 6, fontSize: 8, opacity: 0.7 }}>{historyOpen ? "▲" : "▼"}</span>
+            </span>
           </div>
+          {historyOpen && history.length > 0 && (
+            <div className="history-panel">
+              <div className="history-title">取得履歴（直近{history.length}件）</div>
+              {history.map((h, i) => {
+                const d = new Date(h.ts);
+                const t = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
+                return (
+                  <div key={i} className={`history-entry ${h.ok ? "ok" : "err"}`}>
+                    <span className="history-time">{t}</span>
+                    <span className="history-badge">{h.trigger === "manual" ? "手動" : "自動"}</span>
+                    {h.ok
+                      ? <span className="history-detail">取得成功 ({h.rows}行)</span>
+                      : <span className="history-detail err">エラー: {h.err}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="filters">
           <FilterDropdown label="月" options={allMonths} selected={selMonths} onChange={setSelMonths} />
@@ -558,28 +849,45 @@ export default function Dashboard() {
       {/* KPI Cards */}
       <div className="kpi-row">
         <KpiCard label="架電数" value={agg.tot.calls} unit="" colorClass="c-white"
-          trend={prevMonthData ? agg.tot.calls - prevMonthData.tot.calls : undefined} />
+          trend={prevMonthData ? agg.tot.calls - prevMonthData.tot.calls : undefined}
+          onClick={() => setKpiModal({ key: "calls", label: "架電数", value: agg.tot.calls, unit: "", color: "#f0f4f8" })} />
         <KpiCard label="アポ率" value={apoRate} unit="%" colorClass="c-accent"
-          trend={prevApoRate !== null ? apoRate - prevApoRate : undefined} />
+          trend={prevApoRate !== null ? apoRate - prevApoRate : undefined}
+          onClick={() => setKpiModal({ key: "apoRate", label: "アポ率", value: apoRate, unit: "%", color: COLORS.accent })} />
         <KpiCard label="着電toアポ率" value={cToARate} unit="%" colorClass="c-blue"
-          trend={prevCToARate !== null ? cToARate - prevCToARate : undefined} />
+          trend={prevCToARate !== null ? cToARate - prevCToARate : undefined}
+          onClick={() => setKpiModal({ key: "cToARate", label: "着電toアポ率", value: cToARate, unit: "%", color: COLORS.blue })} />
         <KpiCard label="着電率" value={connRate} unit="%" colorClass="c-amber"
-          trend={prevConnRate !== null ? connRate - prevConnRate : undefined} />
+          trend={prevConnRate !== null ? connRate - prevConnRate : undefined}
+          onClick={() => setKpiModal({ key: "connRate", label: "着電率", value: connRate, unit: "%", color: COLORS.amber })} />
       </div>
+      {kpiModal && <KpiModal metric={kpiModal} data={agg} onClose={() => setKpiModal(null)} />}
 
       {/* Yield Trend */}
       <div className="panels-row">
         <div className="panel">
-          <div className="panel-title"><span>歩留まり推移</span></div>
-          <YieldChart data={chartAgg} />
+          <div className="panel-title">
+            <span>歩留まり推移（週次）</span>
+            {weekDetail && <button className="close-detail" onClick={() => setWeekDetail(null)}>週詳細を閉じる ×</button>}
+          </div>
+          <YieldChart data={chartAgg} onPointClick={(w) => setWeekDetail(w)} />
+          {weekDetail && (
+            <WeekDetailPanel week={weekDetail} rawData={rawData}
+              selBranches={selBranches} selPersons={selPersons} />
+          )}
         </div>
       </div>
 
       {/* Branch Chart + Ranking */}
       <div className="panels-2col">
         <div className="panel">
-          <div className="panel-title"><span>支店別比較</span></div>
-          <BranchChart data={agg} />
+          <div className="panel-title">
+            <span>{drillBranch ? `${drillBranch} · 担当者内訳` : "支店別比較"}</span>
+            {drillBranch && <button className="close-detail" onClick={() => setDrillBranch(null)}>← 戻る</button>}
+          </div>
+          {drillBranch
+            ? <BranchDrillDown branch={drillBranch} rawData={rawData} selMonths={selMonths} />
+            : <BranchChart data={agg} onBarClick={(b) => setDrillBranch(b)} />}
         </div>
         <div className="panel">
           <div className="panel-title">
@@ -589,7 +897,7 @@ export default function Dashboard() {
               <button className={`tab-btn ${rankMode === "ctoa" ? "active" : ""}`} onClick={() => setRankMode("ctoa")}>着電toアポ率</button>
             </div>
           </div>
-          <RankingTable data={agg} mode={rankMode} />
+          <RankingTable data={agg} mode={rankMode} rawData={rawData} />
         </div>
       </div>
 
