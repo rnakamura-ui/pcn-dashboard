@@ -117,9 +117,22 @@ export async function GET(request) {
       );
     }
 
-    // ステップ2: 重複行を削除
-    // クエリパラメータで行番号を指定可能 (?deleteRows=32,33)
+    // ステップ2: 指定行の架電/着電/アポを 0 にゼロ化（?zeroRows=11,22）
     const url = new URL(request.url);
+    report.zeroed = [];
+    const zeroRowsParam = url.searchParams.get('zeroRows');
+    if (zeroRowsParam) {
+      const zeroRows = zeroRowsParam.split(',').map(Number).filter(Boolean);
+      for (const rowNum of zeroRows) {
+        await apiPut(
+          `/values/${encodeURIComponent(`${CONFIG.SHEET_RAW}!D${rowNum}:F${rowNum}`)}?valueInputOption=USER_ENTERED`,
+          { values: [[0, 0, 0]] }
+        );
+        report.zeroed.push(rowNum);
+      }
+    }
+
+    // ステップ3: 重複行を削除（?deleteRows=32,33）
     const delRowsParam = url.searchParams.get('deleteRows');
     if (delRowsParam) {
       const delRows = delRowsParam.split(',').map(Number).filter(Boolean).sort((a, b) => b - a); // 降順
@@ -130,7 +143,7 @@ export async function GET(request) {
               range: {
                 sheetId,
                 dimension: 'ROWS',
-                startIndex: rowNum - 1, // 0-indexed
+                startIndex: rowNum - 1,
                 endIndex: rowNum,
               },
             },
