@@ -111,8 +111,11 @@ export async function GET(request) {
 
       // 人間返信をパースし、期待値を構築
       const expected = [];
+      const debugReplies = [];
       for (const reply of humanReplies) {
-        const branches = parseBranchData(getTextFromEvent(reply));
+        const replyText = getTextFromEvent(reply);
+        const branches = parseBranchData(replyText);
+        if (debug) debugReplies.push({ text: replyText, parsed: branches });
         for (const b of branches) {
           if (b.warn) continue;
           expected.push({
@@ -121,7 +124,7 @@ export async function GET(request) {
           });
         }
       }
-      if (debug) debug.push({ ts: parent.ts, date, person, humanReplyCount: humanReplies.length, expected });
+      if (debug) debug.push({ ts: parent.ts, date, person, humanReplyCount: humanReplies.length, expected, replies: debugReplies });
 
       // スプシと突合
       for (const e of expected) {
