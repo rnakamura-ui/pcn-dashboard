@@ -15,8 +15,11 @@ export async function GET(request) {
   }
 
   try {
-    const result = await backfillRecentThreads(50);
-    return Response.json({ ok: true, ...result, at: new Date().toISOString() });
+    const url = new URL(request.url);
+    const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
+    const limit = Math.min(Math.max(limitParam || 50, 1), 500);
+    const result = await backfillRecentThreads(limit);
+    return Response.json({ ok: true, limit, ...result, at: new Date().toISOString() });
   } catch (err) {
     console.error('backfill error', err);
     return Response.json({ ok: false, error: String(err) }, { status: 500 });
