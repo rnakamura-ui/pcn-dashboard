@@ -59,9 +59,10 @@ export async function GET(request) {
   const autofix = url.searchParams.get('autofix') === '1';
 
   try {
-    // 1. Slack channel history (最大200件)
+    // 1. Slack channel history — days * ~15msg/day を目安に、最低500
+    const historyLimit = Math.min(Math.max(days * 30, 500), 1000);
     const history = await slackApi('conversations.history', {
-      channel: CONFIG.CHANNEL_ID, limit: '200',
+      channel: CONFIG.CHANNEL_ID, limit: String(historyLimit),
     });
     const cutoffTs = (Date.now() / 1000) - days * 86400;
     const parents = (history.messages || []).filter(
