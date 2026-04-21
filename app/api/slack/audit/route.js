@@ -78,12 +78,16 @@ export async function GET(request) {
 
     const anomalies = { missing: [], mismatch: [], no_human_reply: [] };
     const autofixed = [];
+    const debug = url.searchParams.get('debug') === '1' ? [] : null;
 
     for (const parent of parents) {
       const parentText = parent.text || '';
       const date = extractDate(parentText);
       const person = extractPersonName(parentText);
-      if (!date || !person) continue;
+      if (!date || !person) {
+        if (debug) debug.push({ ts: parent.ts, skipped: 'no date or person', date, person });
+        continue;
+      }
 
       // スレッドから人間返信を取得
       const thread = await slackApi('conversations.replies', {
@@ -117,6 +121,7 @@ export async function GET(request) {
           });
         }
       }
+      if (debug) debug.push({ ts: parent.ts, date, person, humanReplyCount: humanReplies.length, expected });
 
       // スプシと突合
       for (const e of expected) {
@@ -169,6 +174,7 @@ export async function GET(request) {
 
     return Response.json({
       ok: true, days, autofix, anomalies, autofixed,
+      ...(debug ? { debug, history_count: (history.messages || []).length } : {}),
       counts: {
         parents_checked: parents.length,
         missing: anomalies.missing.length,
